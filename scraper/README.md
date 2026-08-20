@@ -9,4 +9,4 @@
 - **Robots.txt Result:** No robots file found (or checked via `https://books.toscrape.com/robots.txt`).
 - **Appropriateness:** This is appropriate because the site explicitly welcomes scrapers for educational purposes without impacting production services.
 
-I will not reuse this code on another site without checking its rules and terms first[cite: 1].
+I will not reuse this code on another site without checking its rules and terms first.
