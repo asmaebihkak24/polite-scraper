@@ -5,6 +5,8 @@ import requests
 from datetime import datetime, timezone
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
+from pydantic import BaseModel, HttpUrl, ValidationError
+from typing import Optional
 
 
 BASE_URL = "https://books.toscrape.com/catalogue/page-1.html"
@@ -255,21 +257,93 @@ def extract_all_books(book_links, book_sources):
 
     return records
 
+class BookRecord(BaseModel):
+    title: str
+    product_url: HttpUrl
+    price_text: Optional[str]
+    price_gbp: Optional[float]
+    availability_text: Optional[str]
+    rating_text: Optional[str]
+    description: Optional[str]
+    source_page: HttpUrl
+    fetched_at: str
+def normalize_price(price_text):
+    if price_text is None:
+        return None
 
+    cleaned = price_text.replace("£", "").strip()
+
+    try:
+        return float(cleaned)
+    except ValueError:
+        return None
+def validate_and_store(records):
+    good_records = []
+    errors = []
+
+    seen_urls = set()
+
+    for record in records:
+
+        # Normalize price
+        record["price_gbp"] = normalize_price(
+            record.get("price_text")
+        )
+
+        product_url = record.get("product_url")
+
+        # Remove duplicate URLs
+        if product_url in seen_urls:
+            continue
+
+        seen_urls.add(product_url)
+
+        try:
+            validated = BookRecord.model_validate(record)
+
+            good_records.append(
+                validated.model_dump(mode="json")
+            )
+
+        except ValidationError as error:
+            errors.append({
+                "record": record,
+                "reason": str(error)
+            })
+
+    os.makedirs("output", exist_ok=True)
+
+    with open("output/books.json", "w", encoding="utf-8") as file:
+        json.dump(
+            good_records,
+            file,
+            indent=2,
+            ensure_ascii=False
+        )
+
+    with open("output/errors.json", "w", encoding="utf-8") as file:
+        json.dump(
+            errors,
+            file,
+            indent=2,
+            ensure_ascii=False
+        )
+
+    print(f"valid={len(good_records)}")
+    print(f"errors={len(errors)}")
 if __name__ == "__main__":
-    # Stage 2: discover the 60 unique book URLs
+    # Stage 2
     book_links, book_sources = discover_pages()
 
-    # Stage 3: extract details from every book
+    # Stage 3
     records = extract_all_books(
         book_links,
         book_sources
     )
 
-    # Stage 3 checkpoint
     print(f"unique_urls={len(book_links)}")
 
-    # Print one complete raw record
+    # Print one raw record
     if records:
         print(
             json.dumps(
@@ -278,3 +352,6 @@ if __name__ == "__main__":
                 ensure_ascii=False
             )
         )
+
+    # Stage 4
+    validate_and_store(records)
